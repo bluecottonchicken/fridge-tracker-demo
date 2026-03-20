@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/usr/bin/python3 --version)",
+      "Read(//usr/local/bin/**)",
+      "Bash(brew list:*)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(python3 -c \":*)"
+    ]
+  }
+}
