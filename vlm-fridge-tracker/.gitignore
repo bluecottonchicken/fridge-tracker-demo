@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .venv/
 videos/
+output/
+data/
+.DS_Store

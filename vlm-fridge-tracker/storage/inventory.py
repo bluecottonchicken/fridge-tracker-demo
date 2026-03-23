@@ -94,9 +94,20 @@ def get_session_events(db: Session, session_id: int) -> list[InventoryEvent]:
     ).all())
 
 
-def correct_event(db: Session, event: InventoryEvent, new_item_name: str) -> None:
-    """修正某个事件的物品名称"""
-    event.item = new_item_name
+def correct_event(
+    db: Session,
+    event: InventoryEvent,
+    new_item_name: str = "",
+    new_quantity: Optional[int] = None,
+    new_action: str = "",
+) -> None:
+    """修正某个事件的物品名称、数量或操作方向"""
+    if new_item_name:
+        event.item = new_item_name
+    if new_quantity is not None:
+        event.quantity = new_quantity
+    if new_action in ("put_in", "take_out"):
+        event.action = new_action
     event.is_corrected = True
     db.add(event)
     db.commit()
@@ -128,15 +139,64 @@ def add_manual_event(
     return event
 
 
-def save_to_knowledge(db: Session, user_id: int, event: InventoryEvent) -> None:
-    """将事件信息存入物品知识库供 RAG 使用"""
+MAX_KNOWLEDGE_PER_ITEM = 5  # 同一物品最多保留的知识记录数
+
+
+def save_to_knowledge(
+    db: Session, user_id: int, event: InventoryEvent, embedding: str = ""
+) -> None:
+    """将事件信息存入物品知识库供 RAG 使用。
+
+    同一 user_id + item_name 最多保留 MAX_KNOWLEDGE_PER_ITEM 条记录，
+    超出时淘汰最旧的 vlm_accepted 记录；若全是 user_corrected 则淘汰最旧的。
+    """
     source = "user_corrected" if event.is_corrected else "vlm_accepted"
+
+    # 检查是否有完全重复的描述（同用户、同物品、同描述），有则跳过
+    if event.description:
+        dup = db.exec(
+            select(ItemKnowledge)
+            .where(ItemKnowledge.user_id == user_id)
+            .where(ItemKnowledge.item_name == event.item)
+            .where(ItemKnowledge.description == event.description)
+        ).first()
+        if dup:
+            # 描述完全相同，只升级 source 优先级
+            if source == "user_corrected" and dup.source != "user_corrected":
+                dup.source = source
+                if embedding:
+                    dup.embedding = embedding
+                db.add(dup)
+                db.commit()
+            return
+
+    # 写入新记录
     knowledge = ItemKnowledge(
         user_id=user_id,
         item_name=event.item,
         original_name=event.original_item,
         description=event.description,
         source=source,
+        embedding=embedding,
     )
     db.add(knowledge)
     db.commit()
+
+    # 检查是否超出上限，超出则淘汰
+    existing = db.exec(
+        select(ItemKnowledge)
+        .where(ItemKnowledge.user_id == user_id)
+        .where(ItemKnowledge.item_name == event.item)
+        .order_by(col(ItemKnowledge.created_at))
+    ).all()
+
+    if len(existing) > MAX_KNOWLEDGE_PER_ITEM:
+        # 优先淘汰最旧的 vlm_accepted
+        to_remove = len(existing) - MAX_KNOWLEDGE_PER_ITEM
+        candidates = [r for r in existing if r.source == "vlm_accepted"]
+        if len(candidates) < to_remove:
+            # vlm_accepted 不够淘汰，再从最旧的记录中补
+            candidates = list(existing)
+        for r in candidates[:to_remove]:
+            db.delete(r)
+        db.commit()

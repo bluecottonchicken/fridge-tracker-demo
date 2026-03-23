@@ -14,7 +14,8 @@ class HandObservation(BaseModel):
     """单帧中的手部观察"""
     frame_number: int
     holding_item: str = ""
-    direction: str = ""  # into_fridge / out_of_fridge / unclear
+    direction: str = ""  # v1-v3: into_fridge / out_of_fridge / unclear
+    hand_position: str = ""  # v4: outside_fridge / at_entrance / inside_fridge
 
 
 class FridgeEvent(BaseModel):
@@ -46,4 +47,7 @@ class AnalysisResult(BaseModel):
         cleaned = cleaned.strip()
 
         data = json.loads(cleaned)
+        # Gemini 有时返回数组而非对象，取第一个元素
+        if isinstance(data, list):
+            data = data[0] if data else {}
         return cls.model_validate(data)
