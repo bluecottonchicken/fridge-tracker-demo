@@ -194,8 +194,8 @@ def _pick_item_frames(
                     frame_indices.append(idx)
         if frame_indices:
             return [keyframes[i] for i in frame_indices[:max_frames]]
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"      帧匹配失败，使用默认帧: {e}")
 
     # fallback：首帧 + 中间帧 + 尾帧
     if len(keyframes) <= max_frames:
@@ -310,7 +310,8 @@ def _correction_flow(db, user, saved_session_ids, session_keyframes):
         emb_texts = [f"{evt.item} {evt.description}".strip() for evt in events]
         try:
             emb_vectors = get_embeddings_batch(emb_texts)
-        except Exception:
+        except Exception as e:
+            print(f"  ⚠ embedding 获取失败: {e}，跳过知识库向量写入")
             emb_vectors = [None] * len(events)
 
         print("\n  ┌─ RAG 品类匹配 ─────────────────────────────")

@@ -2,12 +2,11 @@
 
 import time
 
-import cv2
 import numpy as np
 import google.generativeai as genai
-from PIL import Image
 
 import config
+from pipeline.utils import frame_to_pil
 
 if config.PROMPT_TEMPLATE == "v4":
     from vlm.prompt_template_v4 import SYSTEM_PROMPT, build_user_prompt, build_refine_prompt, build_redescribe_prompt
@@ -38,12 +37,6 @@ def reset_usage_stats() -> None:
     _usage_stats["candidates_tokens"] = 0
     _usage_stats["total_tokens"] = 0
     _usage_stats["call_count"] = 0
-
-
-def _frame_to_pil(frame: np.ndarray) -> Image.Image:
-    """OpenCV BGR帧 转 PIL Image"""
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    return Image.fromarray(rgb)
 
 
 def _call_with_retry(model, contents, generation_config) -> str:
@@ -82,7 +75,7 @@ def analyze(keyframes: list[np.ndarray], rag_context: str = "") -> str:
     contents: list = []
     for i, frame in enumerate(keyframes):
         contents.append(f"图{i + 1}:")
-        contents.append(_frame_to_pil(frame))
+        contents.append(frame_to_pil(frame))
 
     contents.append(build_user_prompt(len(keyframes), rag_context))
 
@@ -105,7 +98,7 @@ def refine_item(keyframes: list[np.ndarray], item_description: str, rag_context:
     contents: list = []
     for i, frame in enumerate(keyframes):
         contents.append(f"图{i + 1}:")
-        contents.append(_frame_to_pil(frame))
+        contents.append(frame_to_pil(frame))
 
     contents.append(build_refine_prompt(item_description, rag_context))
 
@@ -130,7 +123,7 @@ def redescribe_item(
     contents: list = []
     for i, frame in enumerate(keyframes):
         contents.append(f"图{i + 1}:")
-        contents.append(_frame_to_pil(frame))
+        contents.append(frame_to_pil(frame))
 
     contents.append(build_redescribe_prompt(correct_name, wrong_name))
 

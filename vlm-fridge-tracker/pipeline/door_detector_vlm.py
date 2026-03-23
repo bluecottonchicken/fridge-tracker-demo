@@ -2,13 +2,12 @@
 
 import json
 
-import cv2
 import numpy as np
 import google.generativeai as genai
-from PIL import Image
 
 import config
 from pipeline.door_detector import DoorState
+from pipeline.utils import frame_to_pil, motion
 
 DOOR_PROMPT = """你是一个冰箱门状态检测器。判断每张图片中冰箱门是否打开。
 
@@ -18,18 +17,6 @@ DOOR_PROMPT = """你是一个冰箱门状态检测器。判断每张图片中冰
 
 输出 JSON 数组，每个元素对应一张图片，不要输出任何其他内容：
 ["open", "closed", "open", ...]"""
-
-
-def _frame_to_pil(frame: np.ndarray) -> Image.Image:
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    return Image.fromarray(rgb)
-
-
-def _motion(frame_a: np.ndarray, frame_b: np.ndarray) -> float:
-    gray_a = cv2.cvtColor(frame_a, cv2.COLOR_BGR2GRAY)
-    gray_b = cv2.cvtColor(frame_b, cv2.COLOR_BGR2GRAY)
-    diff = cv2.absdiff(gray_a, gray_b)
-    return float(np.sum(diff > 25))
 
 
 def detect(frames: list[np.ndarray], debug: bool = False) -> tuple[list[DoorState], list[float]]:
@@ -47,7 +34,7 @@ def detect(frames: list[np.ndarray], debug: bool = False) -> tuple[list[DoorStat
     # 计算运动量（与 cv 版一致）
     motions: list[float] = [0.0]
     for i in range(1, len(frames)):
-        motions.append(_motion(frames[i - 1], frames[i]))
+        motions.append(motion(frames[i - 1], frames[i]))
 
     # 按配置帧率采样
     sample_interval = max(1, int(config.VIDEO_FPS_SAMPLE_RATE / config.DOOR_VLM_SAMPLE_FPS))
@@ -62,7 +49,7 @@ def detect(frames: list[np.ndarray], debug: bool = False) -> tuple[list[DoorStat
     contents: list = []
     for i, frame in enumerate(sampled_frames):
         contents.append(f"图{i + 1}:")
-        contents.append(_frame_to_pil(frame))
+        contents.append(frame_to_pil(frame))
     contents.append(DOOR_PROMPT)
 
     try:

@@ -66,7 +66,7 @@ def save_session_and_events(
 
 
 def get_current_inventory(db: Session, user_id: int) -> dict[str, int]:
-    """计算用户当前库存：聚合所有 put_in 和 take_out 事件"""
+    """计算用户当前库存：聚合所有 put_in 和 take_out 事件，负数钳制为 0"""
     events = db.exec(
         select(InventoryEvent)
         .where(InventoryEvent.user_id == user_id)
@@ -79,8 +79,11 @@ def get_current_inventory(db: Session, user_id: int) -> dict[str, int]:
             inventory[evt.item] = inventory.get(evt.item, 0) + evt.quantity
         elif evt.action == "take_out":
             inventory[evt.item] = inventory.get(evt.item, 0) - evt.quantity
-            if inventory[evt.item] <= 0:
-                del inventory[evt.item]
+            if inventory[evt.item] < 0:
+                inventory[evt.item] = 0
+
+    # 移除数量为 0 的物品
+    inventory = {k: v for k, v in inventory.items() if v > 0}
 
     return inventory
 

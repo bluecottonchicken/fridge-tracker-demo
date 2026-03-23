@@ -114,7 +114,8 @@ def _gemini_categorize(
             ),
         )
         result = json.loads(response.text)
-    except Exception:
+    except Exception as e:
+        print(f"  ⚠ Gemini 品类归类失败: {e}，使用原名「{item_name}」")
         return {"category": item_name, "matched_by": "fallback", "similarity": 0.0}
 
     category_name = result.get("category", item_name)

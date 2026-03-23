@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 
 import config
+from pipeline.utils import motion
 
 
 class DoorState(Enum):
@@ -17,14 +18,6 @@ def _brightness(frame: np.ndarray) -> float:
     """计算帧的平均亮度"""
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     return float(np.mean(gray))
-
-
-def _motion(frame_a: np.ndarray, frame_b: np.ndarray) -> float:
-    """计算两帧之间的运动量（像素差异）"""
-    gray_a = cv2.cvtColor(frame_a, cv2.COLOR_BGR2GRAY)
-    gray_b = cv2.cvtColor(frame_b, cv2.COLOR_BGR2GRAY)
-    diff = cv2.absdiff(gray_a, gray_b)
-    return float(np.sum(diff > 25))
 
 
 def detect(frames: list[np.ndarray], debug: bool = False) -> tuple[list[DoorState], list[float]]:
@@ -53,7 +46,7 @@ def detect(frames: list[np.ndarray], debug: bool = False) -> tuple[list[DoorStat
     for i in range(1, len(frames)):
         current_brightness = _brightness(frames[i])
         brightness_delta = current_brightness - baseline_brightness
-        motion = _motion(frames[i - 1], frames[i])
+        motion = motion(frames[i - 1], frames[i])
         motions.append(motion)
 
         prev_state = states[-1]
