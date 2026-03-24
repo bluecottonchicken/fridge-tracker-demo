@@ -2,11 +2,13 @@
 
 import json
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from sqlmodel import Session, select
 
 import config
 from storage.models import ItemCategory
+from vlm.gemini_client import extract_text
 from rag.embedding import get_embeddings_batch, serialize_embedding
 
 
@@ -30,16 +32,17 @@ CATEGORY_GENERATION_PROMPT = """你是一个食物分类专家。请列出冰箱
 
 def generate_categories() -> list[dict]:
     """调用 Gemini 生成食物品类列表"""
-    model = genai.GenerativeModel(model_name=config.GEMINI_MODEL)
+    client = genai.Client(api_key=config.GEMINI_API_KEY)
 
-    response = model.generate_content(
-        CATEGORY_GENERATION_PROMPT,
-        generation_config=genai.GenerationConfig(
+    response = client.models.generate_content(
+        model=config.GEMINI_MODEL,
+        contents=CATEGORY_GENERATION_PROMPT,
+        config=types.GenerateContentConfig(
             response_mime_type="application/json",
         ),
     )
 
-    return json.loads(response.text)
+    return json.loads(extract_text(response))
 
 
 def init_categories(db: Session) -> int:
@@ -64,7 +67,8 @@ def init_categories(db: Session) -> int:
     texts = [f"{name} {desc}".strip() for name, desc in valid_cats]
     try:
         embeddings = get_embeddings_batch(texts)
-    except Exception:
+    except Exception as e:
+        print(f"  ⚠ embedding 批量生成失败: {e}，品类将缺少向量")
         embeddings = [None] * len(texts)
 
     count = 0

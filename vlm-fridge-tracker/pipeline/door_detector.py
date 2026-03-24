@@ -46,27 +46,27 @@ def detect(frames: list[np.ndarray], debug: bool = False) -> tuple[list[DoorStat
     for i in range(1, len(frames)):
         current_brightness = _brightness(frames[i])
         brightness_delta = current_brightness - baseline_brightness
-        motion = motion(frames[i - 1], frames[i])
-        motions.append(motion)
+        mot = motion(frames[i - 1], frames[i])
+        motions.append(mot)
 
         prev_state = states[-1]
 
         if prev_state == DoorState.CLOSED:
             # 亮度突升 + 有运动 → 开门
             if (brightness_delta > config.BRIGHTNESS_OPEN_THRESHOLD
-                    and motion > config.MOTION_THRESHOLD):
+                    and mot > config.MOTION_THRESHOLD):
                 states.append(DoorState.OPEN)
                 stable_count = 0
                 open_count = 1
                 peak_brightness = current_brightness
                 if debug:
-                    print(f"  [DEBUG] 帧{i}: 亮度={current_brightness:.1f} Δ={brightness_delta:+.1f} 运动={motion:.0f} → ★ OPEN（开门触发）")
+                    print(f"  [DEBUG] 帧{i}: 亮度={current_brightness:.1f} Δ={brightness_delta:+.1f} 运动={mot:.0f} → ★ OPEN（开门触发）")
             else:
                 states.append(DoorState.CLOSED)
                 if debug:
                     b_ok = "✓" if brightness_delta > config.BRIGHTNESS_OPEN_THRESHOLD else "✗"
-                    m_ok = "✓" if motion > config.MOTION_THRESHOLD else "✗"
-                    print(f"  [DEBUG] 帧{i}: 亮度={current_brightness:.1f} Δ={brightness_delta:+.1f}{b_ok} 运动={motion:.0f}{m_ok} → CLOSED")
+                    m_ok = "✓" if mot > config.MOTION_THRESHOLD else "✗"
+                    print(f"  [DEBUG] 帧{i}: 亮度={current_brightness:.1f} Δ={brightness_delta:+.1f}{b_ok} 运动={mot:.0f}{m_ok} → CLOSED")
         else:
             open_count += 1
 
@@ -77,17 +77,17 @@ def detect(frames: list[np.ndarray], debug: bool = False) -> tuple[list[DoorStat
             # 最短开门保护：未满 MIN_OPEN_FRAMES 帧时强制保持 OPEN
             if open_count < config.MIN_OPEN_FRAMES:
                 states.append(DoorState.OPEN)
-                if motion < config.MOTION_THRESHOLD:
+                if mot < config.MOTION_THRESHOLD:
                     stable_count += 1
                 else:
                     stable_count = 0
                 if debug:
-                    print(f"  [DEBUG] 帧{i}: 亮度={current_brightness:.1f} Δ={brightness_delta:+.1f} 运动={motion:.0f} → OPEN（保护期{open_count}/{config.MIN_OPEN_FRAMES}）")
+                    print(f"  [DEBUG] 帧{i}: 亮度={current_brightness:.1f} Δ={brightness_delta:+.1f} 运动={mot:.0f} → OPEN（保护期{open_count}/{config.MIN_OPEN_FRAMES}）")
                 continue
 
             # 已开门状态：亮度回落 + 持续无运动 → 关门
             # 关门判定：亮度须从峰值回落至少 BRIGHTNESS_CLOSE_RATIO 的涨幅
-            if motion < config.MOTION_THRESHOLD:
+            if mot < config.MOTION_THRESHOLD:
                 stable_count += 1
             else:
                 stable_count = 0
@@ -105,6 +105,6 @@ def detect(frames: list[np.ndarray], debug: bool = False) -> tuple[list[DoorStat
             else:
                 states.append(DoorState.OPEN)
                 if debug and i % 5 == 0:  # OPEN 状态每5帧打印一次，避免刷屏
-                    print(f"  [DEBUG] 帧{i}: 亮度={current_brightness:.1f} 峰值={peak_brightness:.1f} 关门阈值={close_threshold:.1f} 运动={motion:.0f} 稳定={stable_count}/{config.STABLE_FRAMES_TO_CLOSE} → OPEN")
+                    print(f"  [DEBUG] 帧{i}: 亮度={current_brightness:.1f} 峰值={peak_brightness:.1f} 关门阈值={close_threshold:.1f} 运动={mot:.0f} 稳定={stable_count}/{config.STABLE_FRAMES_TO_CLOSE} → OPEN")
 
     return states, motions

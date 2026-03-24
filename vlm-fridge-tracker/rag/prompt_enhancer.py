@@ -49,7 +49,7 @@ def build_context(
                 if desc:
                     line += f"\n    正确外观特征：{desc}"
             else:
-                line = f"  - 曾将 {wrong} 错误识别为「{m['corrected']}」"
+                line = f"  - 曾将「{m['corrected']}」错误识别为 {wrong}"
                 if desc:
                     line += f"（{desc}）"
             lines.append(line)
@@ -65,7 +65,7 @@ def build_context(
             desc = f"（{cat['description']}）" if cat.get("description") else ""
             lines.append(f"  - {cat['category']}{desc}")
         sections.append(
-            "已知食物类别（请用这些类别名称识别物品，而非具体品牌名）：\n"
+            "已知食物类别：\n"
             + "\n".join(lines)
         )
 

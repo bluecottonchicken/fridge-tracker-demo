@@ -3,11 +3,13 @@
 import json
 from typing import Optional
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from sqlmodel import Session, select
 
 import config
 from storage.models import ItemCategory
+from vlm.gemini_client import extract_text
 from rag.embedding import (
     get_embedding,
     serialize_embedding,
@@ -62,8 +64,8 @@ def match_category(
         query_text = f"{item_name} {description}".strip()
         try:
             query_emb = get_embedding(query_text)
-        except Exception:
-            # embedding 失败，直接走 Gemini
+        except Exception as e:
+            print(f"  ⚠ embedding 获取失败: {e}，回退 Gemini 归类")
             return _gemini_categorize(db, item_name, description, categories)
 
     # 批量计算相似度：将所有有 embedding 的品类组成矩阵一次算完
@@ -78,7 +80,7 @@ def match_category(
         best_match = cat_list[best_idx]
 
     if best_match and best_sim >= threshold:
-        # 命中：更新品类的 user_names 和 vlm_aliases
+        # 命中：更新品类的 user_names
         _update_category_names(db, best_match, item_name, description)
         return {
             "category": best_match.category,
@@ -97,7 +99,7 @@ def _gemini_categorize(
     categories: list[ItemCategory],
 ) -> dict:
     """调用 Gemini 判断物品品类"""
-    model = genai.GenerativeModel(model_name=config.GEMINI_MODEL)
+    client = genai.Client(api_key=config.GEMINI_API_KEY)
 
     cat_list = "\n".join(f"  - {c.category}" for c in categories)
     prompt = CATEGORIZE_PROMPT_TEMPLATE.format(
@@ -107,13 +109,14 @@ def _gemini_categorize(
     )
 
     try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(
+        response = client.models.generate_content(
+            model=config.GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
                 response_mime_type="application/json",
             ),
         )
-        result = json.loads(response.text)
+        result = json.loads(extract_text(response))
     except Exception as e:
         print(f"  ⚠ Gemini 品类归类失败: {e}，使用原名「{item_name}」")
         return {"category": item_name, "matched_by": "fallback", "similarity": 0.0}
@@ -134,31 +137,29 @@ def _gemini_categorize(
             "similarity": 1.0,
         }
 
-    if is_new:
-        # 新建品类
-        try:
-            emb = serialize_embedding(
-                get_embedding(f"{category_name} {description}")
-            )
-        except Exception:
-            emb = ""
-
-        new_cat = ItemCategory(
-            category=category_name,
-            description=description,
-            vlm_aliases=json.dumps([item_name], ensure_ascii=False),
-            user_names="[]",
-            embedding=emb,
+    # DB 中不存在该品类 → 创建（无论 Gemini 是否标记为 is_new，
+    # 因为 Gemini 可能返回已有品类的变体名如"鲜牛奶"而非"牛奶"）
+    try:
+        emb = serialize_embedding(
+            get_embedding(f"{category_name} {description}")
         )
-        db.add(new_cat)
-        db.commit()
-        return {
-            "category": category_name,
-            "matched_by": "new",
-            "similarity": 1.0,
-        }
+    except Exception as e:
+        print(f"  ⚠ 新品类「{category_name}」embedding 生成失败: {e}")
+        emb = ""
 
-    return {"category": category_name, "matched_by": "gemini", "similarity": 1.0}
+    new_cat = ItemCategory(
+        category=category_name,
+        description=description,
+        user_names="[]",
+        embedding=emb,
+    )
+    db.add(new_cat)
+    db.commit()
+    return {
+        "category": category_name,
+        "matched_by": "new",
+        "similarity": 1.0,
+    }
 
 
 def _update_category_names(

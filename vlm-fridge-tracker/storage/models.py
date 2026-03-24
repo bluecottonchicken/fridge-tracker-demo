@@ -45,14 +45,13 @@ class InventoryEvent(SQLModel, table=True):
 
 
 class ItemCategory(SQLModel, table=True):
-    """食物品类库：三级分类体系"""
+    """食物品类库"""
     __tablename__ = "item_categories"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    category: str = Field(unique=True, index=True)  # Level 2：物品大类（如"牛奶"）
+    category: str = Field(unique=True, index=True)  # 物品大类（如"牛奶"）
     description: str = ""  # 外观特征描述
-    vlm_aliases: str = "[]"  # JSON: VLM 常见输出（Level 1）
-    user_names: str = "[]"  # JSON: 用户修正名称（Level 3）
+    user_names: str = "[]"  # JSON: 用户修正名称
     embedding: str = ""  # JSON 序列化的 embedding 向量
     created_at: datetime = Field(default_factory=datetime.now)
 

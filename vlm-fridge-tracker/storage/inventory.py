@@ -54,7 +54,7 @@ def save_session_and_events(
             user_id=user.id,
             action=evt["action"],
             item=item_name,
-            original_item=item_name,
+            original_item=evt.get("original_item", item_name),
             quantity=evt.get("quantity", 1),
             confidence=evt.get("confidence", 0.0),
             description=evt.get("description", ""),
@@ -86,6 +86,32 @@ def get_current_inventory(db: Session, user_id: int) -> dict[str, int]:
     inventory = {k: v for k, v in inventory.items() if v > 0}
 
     return inventory
+
+
+def get_current_inventory_by_category(db: Session, user_id: int) -> dict[str, int]:
+    """按品类聚合用户当前库存，品类为空时回退到物品名。
+
+    与 get_current_inventory 的区别：
+    - get_current_inventory: GROUP BY item（具体名称），用于 RAG 注入
+    - 本函数: GROUP BY category（品类），用于用户展示
+    """
+    events = db.exec(
+        select(InventoryEvent)
+        .where(InventoryEvent.user_id == user_id)
+        .order_by(col(InventoryEvent.timestamp))
+    ).all()
+
+    inventory: dict[str, int] = {}
+    for evt in events:
+        key = evt.category if evt.category else evt.item
+        if evt.action == "put_in":
+            inventory[key] = inventory.get(key, 0) + evt.quantity
+        elif evt.action == "take_out":
+            inventory[key] = inventory.get(key, 0) - evt.quantity
+            if inventory[key] < 0:
+                inventory[key] = 0
+
+    return {k: v for k, v in inventory.items() if v > 0}
 
 
 def get_session_events(db: Session, session_id: int) -> list[InventoryEvent]:

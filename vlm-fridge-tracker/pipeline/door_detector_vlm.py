@@ -3,11 +3,13 @@
 import json
 
 import numpy as np
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 import config
 from pipeline.door_detector import DoorState
 from pipeline.utils import frame_to_pil, motion
+from vlm.gemini_client import extract_text
 
 DOOR_PROMPT = """你是一个冰箱门状态检测器。判断每张图片中冰箱门是否打开。
 
@@ -45,7 +47,7 @@ def detect(frames: list[np.ndarray], debug: bool = False) -> tuple[list[DoorStat
         print(f"  [VLM门检测] 从 {len(frames)} 帧中采样 {len(sampled_frames)} 帧 (间隔{sample_interval})")
 
     # 调用 Gemini Flash
-    model = genai.GenerativeModel(model_name=config.DOOR_VLM_MODEL)
+    client = genai.Client(api_key=config.GEMINI_API_KEY)
     contents: list = []
     for i, frame in enumerate(sampled_frames):
         contents.append(f"图{i + 1}:")
@@ -53,13 +55,14 @@ def detect(frames: list[np.ndarray], debug: bool = False) -> tuple[list[DoorStat
     contents.append(DOOR_PROMPT)
 
     try:
-        response = model.generate_content(
-            contents,
-            generation_config=genai.GenerationConfig(
+        response = client.models.generate_content(
+            model=config.DOOR_VLM_MODEL,
+            contents=contents,
+            config=types.GenerateContentConfig(
                 response_mime_type="application/json",
             ),
         )
-        raw_states = json.loads(response.text)
+        raw_states = json.loads(extract_text(response))
     except Exception as e:
         print(f"  [VLM门检测] 调用失败: {e}，回退为全部 CLOSED")
         return [DoorState.CLOSED] * len(frames), motions

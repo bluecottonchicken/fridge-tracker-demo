@@ -1,6 +1,5 @@
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
 
 load_dotenv()
 
@@ -11,7 +10,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 def init_genai() -> None:
     """全局初始化 Gemini API，程序启动时调用一次"""
-    genai.configure(api_key=GEMINI_API_KEY)
+    # google.genai 推荐在使用时实例化 Client，不需要全局配置
+    pass
 
 # --- 摄像头/视频 ---
 VIDEO_FPS_SAMPLE_RATE = 5  # 每秒采样帧数
@@ -36,8 +36,9 @@ MAX_KEYFRAMES = 300          # 上限封顶
 GEMINI_MODEL = "gemini-3-flash-preview"  # 可选: "gemini-3.1-pro-preview"(更准但慢) / "gemini-3-flash-preview"(快且便宜)
 PROMPT_TEMPLATE = "v4"  # "v1"(原版) / "v2"(精简) / "v3"(方向优先级) / "v4"(VLM报位置+程序算方向)
 VLM_MAX_RETRIES = 2
-REFINE_CONFIDENCE_THRESHOLD = 0.5  # 低于此置信度触发二次聚焦分析
-CATEGORY_MATCH_THRESHOLD = 0.8    # 品类 embedding 匹配阈值（低于此值走 Gemini 归类）
+CATEGORY_MATCH_THRESHOLD = 0.75   # 品类 embedding 匹配阈值（低于此值走 Gemini 归类）
+KNOWLEDGE_SAVE_THRESHOLD = 0.7    # 未经用户修正的事件，置信度低于此不写入知识库
+EMBEDDING_MODEL = "models/gemini-embedding-001"
 
 # --- 数据库 ---
 DATABASE_PATH = os.path.join(os.path.dirname(__file__), "data", "fridge.db")

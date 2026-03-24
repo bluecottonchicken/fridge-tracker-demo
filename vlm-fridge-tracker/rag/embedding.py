@@ -4,35 +4,35 @@ import json
 from typing import Optional
 
 import numpy as np
-import google.generativeai as genai
+from google import genai
 
 import config
-
-EMBEDDING_MODEL = "models/text-embedding-004"
 
 
 def get_embedding(text: str) -> list[float]:
     """调用 Gemini embedding API 生成单个文本的向量"""
-    result = genai.embed_content(
-        model=EMBEDDING_MODEL,
-        content=text,
+    client = genai.Client(api_key=config.GEMINI_API_KEY)
+    response = client.models.embed_content(
+        model=config.EMBEDDING_MODEL,
+        contents=text,
     )
-    return result["embedding"]
+    return response.embeddings[0].values
 
 
 def get_embeddings_batch(texts: list) -> list[Optional[list]]:
     """批量生成多个文本的 embedding，一次 API 调用
 
     Returns:
-        与 texts 等长的列表，失败的位置为 None
+        与 texts 等长的 embedding 列表；API 失败时整体抛异常
     """
     if not texts:
         return []
-    result = genai.embed_content(
-        model=EMBEDDING_MODEL,
-        content=texts,
+    client = genai.Client(api_key=config.GEMINI_API_KEY)
+    response = client.models.embed_content(
+        model=config.EMBEDDING_MODEL,
+        contents=texts,
     )
-    return result["embedding"]
+    return [emb.values for emb in response.embeddings]
 
 
 def cosine_similarity(vec_a, vec_b) -> float:
