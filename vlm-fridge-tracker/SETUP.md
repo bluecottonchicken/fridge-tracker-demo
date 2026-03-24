@@ -16,7 +16,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-核心依赖包括：`opencv-python`, `google-generativeai`, `pydantic`, `sqlmodel`, `python-dotenv`, `Pillow`, `numpy`。
+核心依赖包括：`opencv-python`, `google-genai`, `pydantic`, `sqlmodel`, `python-dotenv`, `Pillow`, `numpy`。
 
 ## 配置环境变量
 
