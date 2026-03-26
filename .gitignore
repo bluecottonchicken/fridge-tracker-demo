@@ -1,3 +1,10 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+videos/
+output/
+data/
 CLAUDE.md
 CLAUDE-*.md
 .DS_Store

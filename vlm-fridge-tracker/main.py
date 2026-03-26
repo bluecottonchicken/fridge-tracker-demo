@@ -579,34 +579,41 @@ def process_video(video_path: str, user_key: str, is_new_user: bool = False, deb
                             focused_context = f"{base_context}{knowledge_text}"
                             
                             refine_raw = gemini_client.refine_item(item_frames, evt.description, focused_context)
-                            return evt, _json.loads(refine_raw)
+                            return evt, _json.loads(refine_raw), knowledge
                         except Exception as e:
                             print(f"    ✗ \"{evt.item}\" 二次识别失败: {e}")
-                            return evt, None
+                            return evt, None, knowledge
 
                     # 使用多线程并行执行当前片段中所有物品的二次确认（限制 max_workers=3 防止触发并发限制）
                     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
                         future_to_event = {executor.submit(_refine_task, p): p[0] for p in refine_payloads}
                         for future in concurrent.futures.as_completed(future_to_event):
                             event = future_to_event[future]
-                            evt_result, refine_data = future.result()
+                            evt_result, refine_data, evt_knowledge = future.result()
                             if refine_data:
                                 new_item = refine_data.get("item", event.item)
                                 new_conf = refine_data.get("confidence", event.confidence)
                                 new_desc = refine_data.get("description", event.description)
 
                                 name_changed = new_item != event.item
-                                if name_changed and new_conf < event.confidence:
-                                    # Stage 2 给了不同名字但自身置信度更低，不采信
-                                    print(f"    ✗ \"{event.item}\" → \"{new_item}\" 被拒绝（置信度 {new_conf:.0%} < 原 {event.confidence:.0%}），保留原结果")
-                                elif name_changed or new_conf > event.confidence:
-                                    print(f"    ✓ \"{event.item}\" → \"{new_item}\" (置信度: {event.confidence:.0%} → {new_conf:.0%}) [二次确认]")
-                                    print(f"      {new_desc}")
-                                    event.item = new_item
-                                    event.confidence = new_conf
-                                    event.description = new_desc
+                                if name_changed:
+                                    # Stage 2 给了不同名字，检查是否有 RAG 知识库佐证
+                                    corroborated = any(
+                                        k["item_name"] == new_item for k in evt_knowledge
+                                    )
+                                    if corroborated:
+                                        print(f"    ✓ \"{event.item}\" → \"{new_item}\" [Stage 2 纠正，RAG 佐证]")
+                                        print(f"      {new_desc}")
+                                        event.item = new_item
+                                        event.confidence = new_conf
+                                        event.description = new_desc
+                                    else:
+                                        print(f"    ✗ \"{event.item}\" → \"{new_item}\" 被拒绝（RAG 无佐证），保留原结果")
                                 else:
+                                    # Stage 2 名称一致，更新描述（如果更丰富）
                                     print(f"    - \"{event.item}\" 二次确认无误，保留原结果")
+                                    if new_desc and len(new_desc) > len(event.description):
+                                        event.description = new_desc
 
                 if result.fridge_state_after:
                     print(f"\n  冰箱内物品: {', '.join(result.fridge_state_after)}")
@@ -667,7 +674,7 @@ def process_video(video_path: str, user_key: str, is_new_user: bool = False, deb
                 print(f"    [{direction}] {evt.item} x{evt.quantity}{corrected_tag}")
 
         # 打印用户当前总库存（按品类聚合）
-        inventory = get_current_inventory_by_category(db, user.id)
+        inventory = get_current_inventory(db, user.id)
         print(f"\n{'─' * 60}")
         print(f"  用户 [{user.key_code}] 当前冰箱库存:")
         if inventory:
